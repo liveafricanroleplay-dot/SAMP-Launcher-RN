@@ -1,0 +1,65 @@
+name: Build AFRO CITY RP APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "AFRO_CITY_ALYN_1.6_ANDROID_COMPAT_SOURCE.zip"
+      - ".github/workflows/android-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: yarn
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "11"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;android-33" "build-tools;31.0.0" "ndk;21.4.7075529"
+
+      - name: Extract launcher source
+        run: |
+          mkdir -p source
+          unzip -q AFRO_CITY_ALYN_1.6_ANDROID_COMPAT_SOURCE.zip -d source
+          test -f source/SAMP-Mobile-Launcher-RN-main/android/gradlew
+          test -f source/SAMP-Mobile-Launcher-RN-main/package.json
+
+      - name: Install JavaScript dependencies
+        working-directory: source/SAMP-Mobile-Launcher-RN-main
+        run: yarn install --frozen-lockfile --non-interactive
+
+      - name: Build release APK (32-bit ARM game engine)
+        working-directory: source/SAMP-Mobile-Launcher-RN-main/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon clean assembleRelease -PreactNativeArchitectures=armeabi-v7a
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AFRO-CITY-RP-1.6-APK
+          path: source/SAMP-Mobile-Launcher-RN-main/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
