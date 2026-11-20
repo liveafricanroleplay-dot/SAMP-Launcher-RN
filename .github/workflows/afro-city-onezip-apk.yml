@@ -48,7 +48,7 @@ jobs:
       - name: Install Android SDK packages
         run: |
           yes | "$SDKMANAGER" --licenses
-          "$SDKMANAGER" "platform-tools" "platforms;android-33" "build-tools;31.0.0" "ndk;21.4.7075529"
+          "$SDKMANAGER" "platform-tools" "platforms;android-33" "build-tools;33.0.0" "ndk;21.4.7075529"
 
       - name: Extract the exact OneZip source
         run: |
@@ -60,13 +60,23 @@ jobs:
           test -f source/SAMP-Mobile-Launcher-RN-main/android/gradlew
           test -f source/SAMP-Mobile-Launcher-RN-main/android/app/google-services.json
 
+      - name: Upgrade Android D8 toolchain for Zip4j compatibility
+        working-directory: source/SAMP-Mobile-Launcher-RN-main/android
+        run: |
+          echo "Original Android Gradle Plugin declaration:"
+          grep -n "com.android.tools.build:gradle" build.gradle
+          sed -i 's/com.android.tools.build:gradle:7.2.2/com.android.tools.build:gradle:7.4.2/g' build.gradle
+          echo "Updated Android Gradle Plugin declaration:"
+          grep -n "com.android.tools.build:gradle" build.gradle
+          grep -q "com.android.tools.build:gradle:7.4.2" build.gradle
+
       - name: Install JavaScript dependencies
         working-directory: source/SAMP-Mobile-Launcher-RN-main
         run: |
           yarn --version
           yarn install --non-interactive
 
-      - name: Identify Zip4j dependency path
+      - name: Verify Zip4j dependency
         working-directory: source/SAMP-Mobile-Launcher-RN-main/android
         run: |
           chmod +x gradlew
