@@ -89,8 +89,8 @@ jobs:
                   final Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
                   Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
                       try (FileOutputStream out = app.openFileOutput(REPORT, Context.MODE_PRIVATE)) {
-                          String report = "AFRO CITY RP NATIVE JAVA CRASH\\nThread: " + thread.getName()
-                              + "\\n\\n" + android.util.Log.getStackTraceString(error);
+                          String report = "AFRO CITY RP NATIVE JAVA CRASH\nThread: " + thread.getName()
+                              + "\n\n" + android.util.Log.getStackTraceString(error);
                           out.write(report.getBytes(StandardCharsets.UTF_8));
                           out.flush();
                       } catch (Throwable ignored) {}
@@ -103,8 +103,13 @@ jobs:
                   File file = new File(activity.getFilesDir(), REPORT);
                   if (!file.isFile()) return;
                   try {
-                      byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
-                      String report = new String(bytes, StandardCharsets.UTF_8);
+                      java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+                      try (java.io.FileInputStream in = new java.io.FileInputStream(file)) {
+                          byte[] chunk = new byte[4096];
+                          int count;
+                          while ((count = in.read(chunk)) != -1) buffer.write(chunk, 0, count);
+                      }
+                      String report = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
                       new AlertDialog.Builder(activity)
                           .setTitle("Afro City RP startup crash report")
                           .setMessage(report)
@@ -122,15 +127,15 @@ jobs:
           from pathlib import Path
           p = Path("android/app/src/main/java/com/touch/mobile/dark/MainApplication.java")
           s = p.read_text()
-          needle = "  public void onCreate() {\\n    super.onCreate();"
-          replacement = "  public void onCreate() {\\n    super.onCreate();\\n    CrashDiagnostics.install(this);"
+          needle = "  public void onCreate() {\n    super.onCreate();"
+          replacement = "  public void onCreate() {\n    super.onCreate();\n    CrashDiagnostics.install(this);"
           if needle not in s:
               raise SystemExit("Could not locate MainApplication.onCreate for crash handler")
           p.write_text(s.replace(needle, replacement, 1))
           p = Path("android/app/src/main/java/com/touch/mobile/dark/MainActivity.java")
           s = p.read_text()
-          needle = "    super.onCreate(null);\\n    // super.onCreate(savedInstanceState);\\n    surfaceInspector.init(this);"
-          replacement = "    super.onCreate(null);\\n    // super.onCreate(savedInstanceState);\\n    CrashDiagnostics.showPreviousCrash(this);\\n    surfaceInspector.init(this);"
+          needle = "    super.onCreate(null);\n    // super.onCreate(savedInstanceState);\n    surfaceInspector.init(this);"
+          replacement = "    super.onCreate(null);\n    // super.onCreate(savedInstanceState);\n    CrashDiagnostics.showPreviousCrash(this);\n    surfaceInspector.init(this);"
           if needle not in s:
               raise SystemExit("Could not locate MainActivity startup for crash report display")
           p.write_text(s.replace(needle, replacement, 1))
