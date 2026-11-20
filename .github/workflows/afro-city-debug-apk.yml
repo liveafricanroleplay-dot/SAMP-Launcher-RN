@@ -1,0 +1,105 @@
+name: Build Afro City RP Debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "SAMP-Mobile-Launcher-AfroCityRP-Debug.zip"
+      - ".github/workflows/afro-city-debug-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Locate Android SDK tools
+        run: |
+          SDKMANAGER="$(find /usr/local/lib/android -type f -name sdkmanager -print -quit 2>/dev/null)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager was not found on the runner."
+            exit 1
+          fi
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          "$SDKMANAGER" --version
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+
+      - name: Install Android SDK packages
+        run: |
+          yes | "$SDKMANAGER" --licenses
+          "$SDKMANAGER" "platform-tools" "platforms;android-33" "build-tools;33.0.0" "ndk;21.4.7075529"
+
+      - name: Extract the exact Debug source
+        run: |
+          mkdir -p source
+          unzip -q "SAMP-Mobile-Launcher-AfroCityRP-Debug.zip" -d source
+          test -f source/SAMP-Mobile-Launcher-RN-main/package.json
+          test -f source/SAMP-Mobile-Launcher-RN-main/yarn.lock
+          test -f source/SAMP-Mobile-Launcher-RN-main/.env
+          test -f source/SAMP-Mobile-Launcher-RN-main/android/gradlew
+          test -f source/SAMP-Mobile-Launcher-RN-main/android/app/google-services.json
+          test -f source/SAMP-Mobile-Launcher-RN-main/src/debug/ErrorBoundary.tsx
+          test -f source/SAMP-Mobile-Launcher-RN-main/src/debug/errorHandler.ts
+          grep -q "src/debug/errorHandler" source/SAMP-Mobile-Launcher-RN-main/index.js
+          grep -q "ErrorBoundary" source/SAMP-Mobile-Launcher-RN-main/index.js
+
+      - name: Upgrade Android Gradle Plugin
+        working-directory: source/SAMP-Mobile-Launcher-RN-main/android
+        run: |
+          sed -i 's/com.android.tools.build:gradle:7.2.2/com.android.tools.build:gradle:7.4.2/g' build.gradle
+          grep -q "com.android.tools.build:gradle:7.4.2" build.gradle
+
+      - name: Pin Zip4j version
+        working-directory: source/SAMP-Mobile-Launcher-RN-main/android
+        run: |
+          cat >> build.gradle <<'EOF'
+
+          allprojects {
+              configurations.all {
+                  resolutionStrategy.force "net.lingala.zip4j:zip4j:2.11.5"
+              }
+          }
+          EOF
+
+      - name: Install JavaScript dependencies
+        working-directory: source/SAMP-Mobile-Launcher-RN-main
+        run: yarn install --non-interactive
+
+      - name: Verify Zip4j dependency
+        working-directory: source/SAMP-Mobile-Launcher-RN-main/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:dependencyInsight --dependency zip4j --configuration releaseRuntimeClasspath
+
+      - name: Build debug APK with on-screen JS errors
+        working-directory: source/SAMP-Mobile-Launcher-RN-main/android
+        run: ./gradlew --no-daemon clean assembleRelease --stacktrace
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AFRO-CITY-RP-DEBUG-APK
+          path: source/SAMP-Mobile-Launcher-RN-main/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
