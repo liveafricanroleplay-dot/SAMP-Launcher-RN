@@ -64,6 +64,79 @@ jobs:
           grep -q "src/debug/errorHandler" source/SAMP-Mobile-Launcher-RN-main/index.js
           grep -q "ErrorBoundary" source/SAMP-Mobile-Launcher-RN-main/index.js
 
+      - name: Add native Java crash report diagnostics
+        working-directory: source/SAMP-Mobile-Launcher-RN-main
+        run: |
+          mkdir -p android/app/src/main/java/com/touch/mobile/dark
+          cat > android/app/src/main/java/com/touch/mobile/dark/CrashDiagnostics.java <<'EOF'
+          package com.touch.mobile.dark;
+
+          import android.app.Activity;
+          import android.app.AlertDialog;
+          import android.content.ClipboardManager;
+          import android.content.ClipData;
+          import android.content.Context;
+          import java.io.File;
+          import java.io.FileOutputStream;
+          import java.nio.charset.StandardCharsets;
+
+          public final class CrashDiagnostics {
+              private static final String REPORT = "afrocity-native-crash.txt";
+              private CrashDiagnostics() {}
+
+              public static void install(Context context) {
+                  final Context app = context.getApplicationContext();
+                  final Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+                  Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+                      try (FileOutputStream out = app.openFileOutput(REPORT, Context.MODE_PRIVATE)) {
+                          String report = "AFRO CITY RP NATIVE JAVA CRASH\\nThread: " + thread.getName()
+                              + "\\n\\n" + android.util.Log.getStackTraceString(error);
+                          out.write(report.getBytes(StandardCharsets.UTF_8));
+                          out.flush();
+                      } catch (Throwable ignored) {}
+                      if (previous != null) previous.uncaughtException(thread, error);
+                      else android.os.Process.killProcess(android.os.Process.myPid());
+                  });
+              }
+
+              public static void showPreviousCrash(Activity activity) {
+                  File file = new File(activity.getFilesDir(), REPORT);
+                  if (!file.isFile()) return;
+                  try {
+                      byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+                      String report = new String(bytes, StandardCharsets.UTF_8);
+                      new AlertDialog.Builder(activity)
+                          .setTitle("Afro City RP startup crash report")
+                          .setMessage(report)
+                          .setPositiveButton("Close", (dialog, which) -> {})
+                          .setNeutralButton("Copy error", (dialog, which) -> {
+                              ClipboardManager clipboard = (ClipboardManager) activity.getSystemService(Context.CLIPBOARD_SERVICE);
+                              if (clipboard != null) clipboard.setPrimaryClip(ClipData.newPlainText("Afro City RP crash", report));
+                          })
+                          .show();
+                  } catch (Throwable ignored) {}
+              }
+          }
+          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/src/main/java/com/touch/mobile/dark/MainApplication.java")
+          s = p.read_text()
+          needle = "  public void onCreate() {\\n    super.onCreate();"
+          replacement = "  public void onCreate() {\\n    super.onCreate();\\n    CrashDiagnostics.install(this);"
+          if needle not in s:
+              raise SystemExit("Could not locate MainApplication.onCreate for crash handler")
+          p.write_text(s.replace(needle, replacement, 1))
+          p = Path("android/app/src/main/java/com/touch/mobile/dark/MainActivity.java")
+          s = p.read_text()
+          needle = "    super.onCreate(null);\\n    // super.onCreate(savedInstanceState);\\n    surfaceInspector.init(this);"
+          replacement = "    super.onCreate(null);\\n    // super.onCreate(savedInstanceState);\\n    CrashDiagnostics.showPreviousCrash(this);\\n    surfaceInspector.init(this);"
+          if needle not in s:
+              raise SystemExit("Could not locate MainActivity startup for crash report display")
+          p.write_text(s.replace(needle, replacement, 1))
+          PY
+          grep -n "CrashDiagnostics" android/app/src/main/java/com/touch/mobile/dark/MainApplication.java android/app/src/main/java/com/touch/mobile/dark/MainActivity.java
+
       - name: Upgrade Android Gradle Plugin
         working-directory: source/SAMP-Mobile-Launcher-RN-main/android
         run: |
