@@ -70,6 +70,21 @@ jobs:
           grep -n "com.android.tools.build:gradle" build.gradle
           grep -q "com.android.tools.build:gradle:7.4.2" build.gradle
 
+      - name: Pin Zip4j to a D8-compatible release
+        working-directory: source/SAMP-Mobile-Launcher-RN-main/android
+        run: |
+          # react-native-zip-archive requests Zip4j through the dynamic 2.+ range.
+          # Pin a stable patch release instead of allowing Maven to select 2.11.6.
+          cat >> build.gradle <<'EOF'
+
+          allprojects {
+              configurations.all {
+                  resolutionStrategy.force "net.lingala.zip4j:zip4j:2.11.5"
+              }
+          }
+          EOF
+          grep -n "zip4j:zip4j" build.gradle
+
       - name: Install JavaScript dependencies
         working-directory: source/SAMP-Mobile-Launcher-RN-main
         run: |
