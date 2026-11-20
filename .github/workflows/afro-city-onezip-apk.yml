@@ -66,11 +66,16 @@ jobs:
           yarn --version
           yarn install --non-interactive
 
-      - name: Build release APK
+      - name: Identify Zip4j dependency path
         working-directory: source/SAMP-Mobile-Launcher-RN-main/android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon clean assembleRelease
+          ./gradlew --no-daemon :app:dependencyInsight --dependency zip4j --configuration releaseRuntimeClasspath
+
+      - name: Build release APK
+        working-directory: source/SAMP-Mobile-Launcher-RN-main/android
+        run: |
+          ./gradlew --no-daemon clean assembleRelease --stacktrace
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
